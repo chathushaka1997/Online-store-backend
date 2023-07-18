@@ -21,19 +21,19 @@ public class ProductController {
     }
 
     @GetMapping
-    public List<Product> getAllUsers() {
+    public List<Product> getAllProducts() {
         return productRepository.findAll();
     }
 
     @GetMapping("/{id}")
-    public Product getUserById(@PathVariable Long id) {
+    public Product getProductById(@PathVariable Long id) {
 
         return productRepository.findById(id)
                 .orElseThrow(() -> new ProductNotFound("Product not found "+id));
     }
 
     @PostMapping
-    public Product createUser(@Valid @RequestBody Product product) {
+    public Product createProduct(@Valid @RequestBody Product product) {
         return productRepository.save(product);
     }
 }

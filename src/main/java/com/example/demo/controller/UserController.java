@@ -1,31 +1,55 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.AuthResponseDTO;
+import com.example.demo.dto.LoginDto;
 import com.example.demo.exceptions.UserNotFoundException;
+import com.example.demo.model.Role;
 import com.example.demo.model.User;
 import com.example.demo.model.UserResponse;
+import com.example.demo.repository.RoleRepository;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.security.JWTGenerator;
 import com.example.demo.service.UserService;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @RestController
 @Slf4j
 @RequestMapping("/users")
 public class UserController {
+    private AuthenticationManager   authenticationManager;
     private final UserRepository userRepository;
 
+    private RoleRepository roleRepository;
+
+    private PasswordEncoder passwordEncoder;
+
+    private JWTGenerator jwtGenerator;
     @Autowired
-    public UserController(UserRepository userRepository) {
+    public UserController(AuthenticationManager authenticationManager, UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder,JWTGenerator jwtGenerator) {
+        this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtGenerator = jwtGenerator;
     }
+
+
 
     @Autowired
     public UserService userService;
@@ -59,24 +83,32 @@ public class UserController {
     }
 
     @PostMapping
-    public User createUser(@RequestBody User user) {
-        return userRepository.save(user);
+    public ResponseEntity<String> createUser(@Valid @RequestBody User user) {
+        if(userRepository.existsByName(user.getName())){
+            return new ResponseEntity<>("User is taken",HttpStatus.BAD_REQUEST);
+        }
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+
+        Role roles = roleRepository.findByName("USER").get();
+        user.setRoles(Collections.singletonList(roles));
+
+        userRepository.save(user);
+        return new ResponseEntity<>("User registerd success",HttpStatus.CREATED);
     }
 
+
+
     @PostMapping("/login")
-    public ResponseEntity<?> loginUser(@RequestBody User user) {
+    public ResponseEntity<AuthResponseDTO> loginUser(@RequestBody LoginDto loginDto) {
 
+        System.out.println();
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginDto.getName(),
+                        loginDto.getPassword()));
 
-        Optional<User> fetchedUser = userRepository.findById(user.getId());
-        if(!fetchedUser.isPresent()){
-            return new ResponseEntity<String>("User not found",HttpStatus.NOT_FOUND);
-        }
-
-        if(!fetchedUser.get().getPassword().equals(user.getPassword())){
-            return new ResponseEntity<String>("Incorrect password",HttpStatus.NOT_FOUND);
-        }
-
-        return new ResponseEntity<String>("Login sucess",HttpStatus.OK);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        String token = jwtGenerator.generateToken(authentication);
+        return new ResponseEntity<>(new AuthResponseDTO(token),HttpStatus.OK);
     }
 
     @PutMapping("/{id}")
